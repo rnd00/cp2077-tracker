@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>V's Cybernetic Quest Log | v5.0</title>
+    <style>
+        :root { --cp-yellow: #fcee0a; --cp-blue: #00f0ff; --cp-black: #050505; --cp-red: #ff3c3c; --text: #e6e6e6; }
+        body { background: var(--cp-black); color: var(--text); font-family: 'Segoe UI', sans-serif; margin: 0; padding: 20px; background-attachment: fixed; background-image: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.1) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.02), rgba(0, 255, 0, 0.01), rgba(0, 0, 255, 0.02)); background-size: 100% 4px, 3px 100%; }
+        .container { max-width: 1100px; margin: 0 auto; }
+        .dashboard { position: sticky; top: 0; background: rgba(5,5,5,0.98); padding: 15px; z-index: 1000; border: 1px solid var(--cp-blue); margin-bottom: 20px; box-shadow: 0 0 15px rgba(0,240,255,0.2); }
+        .bar-bg { background: #222; height: 10px; border: 1px solid #333; margin: 10px 0; }
+        .bar-fill { background: var(--cp-yellow); height: 100%; width: 0%; transition: 0.5s; }
+        .search-box { width: 100%; background: #000; border: 1px solid var(--cp-yellow); color: var(--cp-yellow); padding: 12px; margin-bottom: 10px; box-sizing: border-box; }
+        .filter-row { display: flex; flex-wrap: wrap; gap: 8px; }
+        .btn { background: #111; border: 1px solid #444; color: #888; padding: 6px 12px; cursor: pointer; font-size: 11px; text-transform: uppercase; letter-spacing: 1px; }
+        .btn.active { background: var(--cp-blue); color: #000; border-color: var(--cp-blue); }
+        .section { margin-bottom: 10px; border: 1px solid #222; background: rgba(10,10,10,0.8); }
+        .section-head { background: #1a1a1a; padding: 12px; cursor: pointer; display: flex; justify-content: space-between; border-left: 4px solid var(--cp-blue); transition: 0.3s; }
+        .section-head:hover { background: #252525; }
+        .section-content { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 12px; padding: 15px; }
+        .section-content.collapsed { display: none; }
+        .job-card { background: #0d0d0d; border: 1px solid #222; padding: 12px; display: flex; flex-direction: column; position: relative; }
+        .job-card:hover { border-color: var(--cp-yellow); }
+        .job-card.done { opacity: 0.3; filter: grayscale(1); }
+        .job-card a { color: var(--text); text-decoration: none; font-weight: bold; font-size: 0.95rem; }
+        .badge { font-size: 9px; padding: 2px 5px; margin-top: 5px; font-weight: bold; text-transform: uppercase; display: inline-block; border-radius: 2px; }
+        .iconic { background: var(--cp-yellow); color: #000; margin-right: 5px; }
+        .missable { background: var(--cp-red); color: #fff; margin-right: 5px; }
+        .romance { border: 1px solid #ff69b4; color: #ff69b4; margin-right: 5px; }
+        .note-area { width: 100%; background: #000; border: 1px solid #333; color: var(--cp-blue); font-size: 11px; margin-top: 8px; padding: 5px; display: none; box-sizing: border-box; }
+        .hidden { display: none !important; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <div class="dashboard">
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+            <span style="color:var(--cp-yellow); font-weight:bold; letter-spacing:2px;">DATABASE_ACCESS: GRANTED</span>
+            <span id="pct-text" style="color:var(--cp-blue); font-family:monospace;">0%</span>
+        </div>
+        <div class="bar-bg"><div class="bar-fill" id="prog-bar"></div></div>
+        <input type="text" id="search" class="search-box" placeholder="SEARCH BY NAME, REWARD, OR NPC..." onkeyup="filter()">
+        <div class="filter-row">
+            <button class="btn" id="hideDone" onclick="toggleHideDone()">Hide Completed</button>
+            <button class="btn" onclick="filterByTag('romance')">Romance ❤️</button>
+            <button class="btn" onclick="filterByTag('iconic')">Iconics 🔫</button>
+            <button class="btn" onclick="filterByTag('missable')">Missable ⚠️</button>
+            <button class="btn" onclick="clearData()" style="color:var(--cp-red); margin-left:auto;">Wipe Data</button>
+        </div>
+    </div>
+    <div id="list-container"></div>
+</div>
+
+<script>
+    // DATA PACK INJECTION POINT
+    const jobs = [
+        // PHANTOM LIBERTY (DOGTOWN)
+        { id: 'pl1', cat: 'Phantom Liberty', name: 'Dog Eat Dog', link: 'https://cyberpunk.fandom.com/wiki/Dog_Eat_Dog', tags: [] },
+        { id: 'pl2', cat: 'Phantom Liberty', name: 'No Easy Way Out', link: 'https://cyberpunk.fandom.com/wiki/No_Easy_Way_Out', tags: ['iconic'], reward: 'Agaou Axe' },
+        { id: 'pl3', cat: 'Phantom Liberty', name: 'Addicted to Chaos', link: 'https://cyberpunk.fandom.com/wiki/Addicted_to_Chaos', tags: ['iconic'], reward: 'Carmen AR' },
+        { id: 'pl4', cat: 'Phantom Liberty', name: 'Money for Nothing', link: 'https://cyberpunk.fandom.com/wiki/Money_for_Nothing', tags: [] },
+        { id: 'pl5', cat: 'Phantom Liberty', name: 'Dazed and Confused', link: 'https://cyberpunk.fandom.com/wiki/Dazed_and_Confused', tags: ['iconic'], reward: 'Baby Boomer' },
+        { id: 'pl6', cat: 'Phantom Liberty', name: 'Shot by Both Sides', link: 'https://cyberpunk.fandom.com/wiki/Shot_by_Both_Sides', tags: ['iconic'], reward: 'Ol Reliable' },
+        { id: 'pl7', cat: 'Phantom Liberty', name: 'Baby Let Me Take You', link: 'https://cyberpunk.fandom.com/wiki/Baby_Let_Me_Take_You_Home', tags: ['iconic'], reward: 'Raiju' },
+        { id: 'pl8', cat: 'Phantom Liberty', name: 'The Killing Moon', link: 'https://cyberpunk.fandom.com/wiki/The_Killing_Moon', tags: ['missable', 'iconic'], reward: 'Pariah' },
+        { id: 'pl9', cat: 'Phantom Liberty', name: 'Run This Town', link: 'https://cyberpunk.fandom.com/wiki/Run_This_Town', tags: ['iconic'], reward: 'Murphy\'s Law' },
+		
+		// WATSON SIDE JOBS (IGN Verified)
+        { id: 'w1', cat: 'Watson', name: 'I\'m in Love With My Car', link: 'https://www.ign.com/wikis/cyberpunk-2077/I%27m_in_Love_With_My_Car_-_Ken_Block_Car_Location', tags: ['iconic'], reward: 'Type-66 "Hoseki"' },
+        { id: 'w2', cat: 'Watson', name: 'The Gift', link: 'https://www.ign.com/wikis/cyberpunk-2077/The_Gift', tags: [] },
+        { id: 'w3', cat: 'Watson', name: 'Paid in Full', link: 'https://www.ign.com/wikis/cyberpunk-2077/Paid_in_Full', tags: [] },
+        { id: 'w4', cat: 'Watson', name: 'Big in Japan', link: 'https://www.ign.com/wikis/cyberpunk-2077/Big_in_Japan', tags: ['iconic'], reward: 'Scalpel (Katana)' },
+        { id: 'w5', cat: 'Watson', name: 'Beat on the Brat', link: 'https://www.ign.com/wikis/cyberpunk-2077/Beat_on_the_Brat', tags: [] },
+        { id: 'w6', cat: 'Watson', name: 'Beat on the Brat: Kabuki', link: 'https://www.ign.com/wikis/cyberpunk-2077/Beat_on_the_Brat:_Kabuki', tags: [] },
+        { id: 'w7', cat: 'Watson', name: 'The Gig', link: 'https://www.ign.com/wikis/cyberpunk-2077/The_Gig', tags: [] },
+        { id: 'w8', cat: 'Watson', name: 'The Gun', link: 'https://www.ign.com/wikis/cyberpunk-2077/The_Gun', tags: ['iconic'], reward: 'Dying Night' },
+        { id: 'w9', cat: 'Watson', name: 'Sacrum Profanum', link: 'https://www.ign.com/wikis/cyberpunk-2077/Sacrum_Profanum', tags: ['iconic'], reward: 'Fenrir (SMG)' },
+        { id: 'w10', cat: 'Watson', name: 'Epistrophy', link: 'https://www.ign.com/wikis/cyberpunk-2077/Epistrophy', tags: [] },
+        { id: 'w11', cat: 'Watson', name: 'Epistrophy: Northside', link: 'https://www.ign.com/wikis/cyberpunk-2077/Epistrophy:_Northside', tags: [] },
+        { id: 'w12', cat: 'Watson', name: 'Burning Desire', link: 'https://www.ign.com/wikis/cyberpunk-2077/Burning_Desire', tags: [] },
+        { id: 'w13', cat: 'Watson', name: 'Happy Together', link: 'https://www.ign.com/wikis/cyberpunk-2077/Happy_Together', tags: ['missable'] },
+        { id: 'w14', cat: 'Watson', name: 'Shoot to Thrill', link: 'https://www.ign.com/wikis/cyberpunk-2077/Shoot_to_Thrill', tags: [] },
+        { id: 'w15', cat: 'Watson', name: 'Tune Up', link: 'https://www.ign.com/wikis/cyberpunk-2077/Tune_Up', tags: [] },
+        { id: 'w16', cat: 'Watson', name: 'Fool on the Hill', link: 'https://www.ign.com/wikis/cyberpunk-2077/Fool_on_the_Hill', tags: [] },
+        { id: 'w17', cat: 'Watson', name: 'Human Nature', link: 'https://www.ign.com/wikis/cyberpunk-2077/Human_Nature', tags: [] },
+        { id: 'w18', cat: 'Watson', name: 'The Prophet\'s Song', link: 'https://www.ign.com/wikis/cyberpunk-2077/The_Prophet\'s_Song', tags: ['missable'] },
+        { id: 'w19', cat: 'Watson', name: 'Venus in Furs', link: 'https://www.ign.com/wikis/cyberpunk-2077/Venus_in_Furs', tags: ['iconic'], reward: 'Sir John Phallustiff' },
+        { id: 'w20', cat: 'Watson', name: 'I Fought the Law', link: 'https://www.ign.com/wikis/cyberpunk-2077/I_Fought_the_Law', tags: ['river'] },
+        { id: 'w21', cat: 'Watson', name: 'The Hunt', link: 'https://www.ign.com/wikis/cyberpunk-2077/The_Hunt', tags: ['river', 'romance', 'missable'] },
+        { id: 'w22', cat: 'Watson', name: 'Send in the Clowns', link: 'https://www.ign.com/wikis/cyberpunk-2077/Send_in_the_Clowns', tags: ['iconic'], reward: 'Ozob\'s Nose' },
+        { id: 'w23', cat: 'Watson', name: 'Full Disclosure', link: 'https://www.ign.com/wikis/cyberpunk-2077/Full_Disclosure', tags: [] },
+        { id: 'w24', cat: 'Watson', name: 'Both Sides, Now', link: 'https://www.ign.com/wikis/cyberpunk-2077/Both_Sides,_Now', tags: ['judy'] },
+        { id: 'w25', cat: 'Watson', name: 'Talking Bout A Revolution', link: 'https://www.ign.com/wikis/cyberpunk-2077/Talking_Bout_A_Revolution', tags: ['judy'] },
+        { id: 'w26', cat: 'Watson', name: 'Violence', link: 'https://www.ign.com/wikis/cyberpunk-2077/Violence', tags: [] },
+        { id: 'w27', cat: 'Watson', name: 'Chippin\' In', link: 'https://www.ign.com/wikis/cyberpunk-2077/Chippin\'_In', tags: ['johnny', 'iconic'], reward: 'Malorian 3516' },
+        { id: 'w28', cat: 'Watson', name: 'A Cool Metal Fire', link: 'https://www.ign.com/wikis/cyberpunk-2077/A_Cool_Metal_Fire', tags: ['johnny'] },
+        { id: 'w29', cat: 'Watson', name: 'Blistering Love', link: 'https://www.ign.com/wikis/cyberpunk-2077/Blistering_Love', tags: ['johnny', 'romance'] },
+        { id: 'w30', cat: 'Watson', name: 'Psycho Killer', link: 'https://www.ign.com/wikis/cyberpunk-2077/Psycho_Killer', tags: [] },
+        { id: 'w31', cat: 'Watson', name: 'War Pigs', link: 'https://www.ign.com/wikis/cyberpunk-2077/War_Pigs', tags: ['iconic'], reward: 'Apparition' },
+        { id: 'w32', cat: 'Watson', name: 'Second Conflict', link: 'https://www.ign.com/wikis/cyberpunk-2077/Second_Conflict', tags: ['johnny', 'iconic'], reward: 'Doom Doom' },
+        { id: 'w33', cat: 'Watson', name: 'A Like Supreme', link: 'https://www.ign.com/wikis/cyberpunk-2077/A_Like_Supreme', tags: ['johnny', 'iconic'], reward: 'Archangel' },
+        { id: 'w34', cat: 'Watson', name: 'Rebel Rebel', link: 'https://www.ign.com/wikis/cyberpunk-2077/Rebel_Rebel', tags: ['kerry'] },
+        { id: 'w35', cat: 'Watson', name: 'I Don\'t Wanna Hear It', link: 'https://www.ign.com/wikis/cyberpunk-2077/I_Don\'t_Wanna_Hear_It', tags: ['kerry'] },
+        { id: 'w36', cat: 'Watson', name: 'Off The Leash', link: 'https://www.ign.com/wikis/cyberpunk-2077/Off_The_Leash', tags: ['kerry'] },
+        { id: 'w37', cat: 'Watson', name: 'Boat Drinks', link: 'https://www.ign.com/wikis/cyberpunk-2077/Boat_Drinks', tags: ['kerry', 'romance'] },
+        { id: 'w38', cat: 'Watson', name: 'Killing in the Name', link: 'https://www.ign.com/wikis/cyberpunk-2077/Killing_in_the_Name', tags: [] },
+        { id: 'w39', cat: 'Watson', name: 'I Really Want to Stay at Your House', link: 'https://www.ign.com/wikis/cyberpunk-2077/I_Really_Want_to_Stay_at_Your_House', tags: ['romance'] },
+		
+		// HEYWOOD SIDE JOBS (IGN Verified)
+        { id: 'h1', cat: 'Heywood', name: 'Heroes', link: 'https://www.ign.com/wikis/cyberpunk-2077/Heroes', tags: ['iconic'], reward: 'La Chingona Dorada' },
+        { id: 'h2', cat: 'Heywood', name: 'Beat On The Brat: The Glen', link: 'https://www.ign.com/wikis/cyberpunk-2077/Beat_On_The_Brat:_The_Glen', tags: [] },
+        { id: 'h3', cat: 'Heywood', name: 'Epistrophy: The Glen', link: 'https://www.ign.com/wikis/cyberpunk-2077/Epistrophy:_The_Glen', tags: [] },
+        { id: 'h4', cat: 'Heywood', name: 'Epistrophy: Wellspring', link: 'https://www.ign.com/wikis/cyberpunk-2077/Epistrophy:_Wellspring', tags: [] },
+        { id: 'h5', cat: 'Heywood', name: 'Don\'t Lose Your Mind', link: 'https://www.ign.com/wikis/cyberpunk-2077/Don%27t_Lose_Your_Mind', tags: ['iconic'], reward: 'Delamain Cab (Vehicle)' },
+        { id: 'h6', cat: 'Heywood', name: 'Imagine', link: 'https://www.ign.com/wikis/cyberpunk-2077/Imagine', tags: [] },
+        { id: 'h7', cat: 'Heywood', name: 'Machine Gun', link: 'https://www.ign.com/wikis/cyberpunk-2077/Machine_Gun', tags: ['iconic', 'missable'], reward: 'Skippy (Pistol)' },
+        { id: 'h8', cat: 'Heywood', name: 'Raymond Chandler Evening', link: 'https://www.ign.com/wikis/cyberpunk-2077/Raymond_Chandler_Evening', tags: [] },
+        { id: 'h9', cat: 'Heywood', name: 'Only Pain', link: 'https://www.ign.com/wikis/cyberpunk-2077/Only_Pain', tags: [] },
+        { id: 'h10', cat: 'Heywood', name: 'Small Man, Big Mouth', link: 'https://www.ign.com/wikis/cyberpunk-2077/Small_Man,_Big_Mouth', tags: [] },
+		
+		// WESTBROOK SIDE JOBS (IGN Verified)
+        { id: 'we1', cat: 'Westbrook', name: 'The Ballad of Buck Ravers', link: 'https://www.ign.com/wikis/cyberpunk-2077/The_Ballad_of_Buck_Ravers', tags: ['johnny'] },
+        { id: 'we2', cat: 'Westbrook', name: 'Epistrophy: North Oak', link: 'https://www.ign.com/wikis/cyberpunk-2077/Epistrophy:_North_Oak', tags: [] },
+        { id: 'we3', cat: 'Westbrook', name: 'I Can See Clearly Now', link: 'https://www.ign.com/wikis/cyberpunk-2077/I_Can_See_Clearly_Now', tags: [] },
+        { id: 'we4', cat: 'Westbrook', name: 'Spray Paint', link: 'https://www.ign.com/wikis/cyberpunk-2077/Spray_Paint', tags: [] },
+        { id: 'we5', cat: 'Westbrook', name: 'Coin Operated Boy', link: 'https://www.ign.com/wikis/cyberpunk-2077/Coin_Operated_Boy', tags: ['missable'] },
+        { id: 'we6', cat: 'Westbrook', name: 'Stairway to Heaven', link: 'https://www.ign.com/wikis/cyberpunk-2077/Stairway_to_Heaven', tags: [] },
+        { id: 'we7', cat: 'Westbrook', name: 'Poem of the Atoms', link: 'https://www.ign.com/wikis/cyberpunk-2077/Poem_of_the_Atoms', tags: [] },
+        { id: 'we8', cat: 'Westbrook', name: 'Sweet Dreams', link: 'https://www.ign.com/wikis/cyberpunk-2077/Sweet_Dreams', tags: [] },
+        { id: 'we9', cat: 'Westbrook', name: 'Dream On', link: 'https://www.ign.com/wikis/cyberpunk-2077/Dream_On', tags: ['missable'] },
+        { id: 'we10', cat: 'Westbrook', name: 'Ex-Factor', link: 'https://www.ign.com/wikis/cyberpunk-2077/Ex-Factor', tags: ['judy'] },
+        { id: 'we11', cat: 'Westbrook', name: 'Pisces', link: 'https://www.ign.com/wikis/cyberpunk-2077/Pisces', tags: ['judy', 'iconic'], reward: 'Tsunami Shingen Mark V' },
+        { id: 'we12', cat: 'Westbrook', name: 'Holdin\' On', link: 'https://www.ign.com/wikis/cyberpunk-2077/Holdin_On', tags: ['kerry'] },
+		
+		// SANTO DOMINGO SIDE JOBS (IGN Verified)
+        { id: 's1', cat: 'Santo Domingo', name: 'Beat On The Brat: Rancho Coronado', link: 'https://www.ign.com/wikis/cyberpunk-2077/Beat_On_The_Brat:_Rancho_Coronado', tags: [] },
+        { id: 's2', cat: 'Santo Domingo', name: 'Beat On The Brat: Arroyo', link: 'https://www.ign.com/wikis/cyberpunk-2077/Beat_On_The_Brat:_Arroyo', tags: ['iconic'], reward: 'O\'Five (Sniper)' },
+        { id: 's3', cat: 'Santo Domingo', name: 'Epistrophy: Rancho Coronado', link: 'https://www.ign.com/wikis/cyberpunk-2077/Epistrophy:_Rancho_Coronado', tags: [] },
+        { id: 's4', cat: 'Santo Domingo', name: 'The Beast In Me', link: 'https://www.ign.com/wikis/cyberpunk-2077/The_Beast_In_Me', tags: ['iconic'], reward: 'Cthulhu or Beast Truck' },
+        { id: 's5', cat: 'Santo Domingo', name: 'Ezekiel Saw The Wheel', link: 'https://www.ign.com/wikis/cyberpunk-2077/Ezekiel_Saw_The_Wheel', tags: [] },
+        { id: 's6', cat: 'Santo Domingo', name: 'A Day In The Life', link: 'https://www.ign.com/wikis/cyberpunk-2077/A_Day_In_The_Life', tags: [] },
+        { id: 's7', cat: 'Santo Domingo', name: 'Stadium Love', link: 'https://www.ign.com/wikis/cyberpunk-2077/Stadium_Love', tags: ['iconic'], reward: 'Divided We Stand' },
+        { id: 's8', cat: 'Santo Domingo', name: 'Space Oddity', link: 'https://www.ign.com/wikis/cyberpunk-2077/Space_Oddity', tags: [] },
+        { id: 's9', cat: 'Santo Domingo', name: 'Sinnerman', link: 'https://www.ign.com/wikis/cyberpunk-2077/Sinnerman', tags: [] },
+        { id: 's10', cat: 'Santo Domingo', name: 'There Is A Light That Never Goes Out', link: 'https://www.ign.com/wikis/cyberpunk-2077/There_Is_A_Light_That_Never_Goes_Out', tags: [] },
+        { id: 's11', cat: 'Santo Domingo', name: 'They Won\'t Go When I Go', link: 'https://www.ign.com/wikis/cyberpunk-2077/They_Won%27t_Go_When_I_Go', tags: [] },
+        { id: 's12', cat: 'Santo Domingo', name: 'Gun Music', link: 'https://www.ign.com/wikis/cyberpunk-2077/Gun_Music', tags: [] },
+        { id: 's13', cat: 'Santo Domingo', name: 'The Highwayman', link: 'https://www.ign.com/wikis/cyberpunk-2077/The_Highwayman', tags: ['iconic'], reward: 'Nazare Itsumade (Bike)' },
+        { id: 's14', cat: 'Santo Domingo', name: 'Sex On Wheels', link: 'https://www.ign.com/wikis/cyberpunk-2077/Sex_On_Wheels', tags: ['iconic'], reward: 'Quadra Turbo-R V-Tech' },
+        { id: 's15', cat: 'Santo Domingo', name: 'Pyramid Song', link: 'https://www.ign.com/wikis/cyberpunk-2077/Pyramid_Song', tags: ['judy', 'romance', 'iconic'], reward: 'Mox Shotgun' },
+        { id: 's16', cat: 'Santo Domingo', name: 'Shape of a Pony', link: 'https://www.ign.com/wikis/cyberpunk-2077/Shape_of_a_Pony', tags: [] },
+		
+		// PACIFICA SIDE JOBS (IGN Verified)
+        { id: 'p1', cat: 'Pacifica', name: 'Beat on the Brat: Pacifica', link: 'https://www.ign.com/wikis/cyberpunk-2077/Beat_on_the_Brat:_Pacifica', tags: [] },
+        { id: 'p2', cat: 'Pacifica', name: 'Epistrophy: Coastview', link: 'https://www.ign.com/wikis/cyberpunk-2077/Epistrophy:_Coastview', tags: [] },
+
+        // BADLANDS SIDE JOBS (IGN Verified)
+        { id: 'b1', cat: 'Badlands', name: 'Epistrophy: Badlands', link: 'https://www.ign.com/wikis/cyberpunk-2077/Epistrophy:_Badlands', tags: [] },
+        { id: 'b2', cat: 'Badlands', name: 'These Boots Are Made For Walkin\'', link: 'https://www.ign.com/wikis/cyberpunk-2077/These_Boots_Are_Made_For_Walkin\'', tags: ['nomad_only'], reward: 'V\'s Galena' },
+        { id: 'b3', cat: 'Badlands', name: 'Following The River', link: 'https://www.ign.com/wikis/cyberpunk-2077/Following_The_River', tags: ['river', 'romance', 'iconic'], reward: 'Crash (Revolver)' },
+        { id: 'b4', cat: 'Badlands', name: 'Riders on the Storm', link: 'https://www.ign.com/wikis/cyberpunk-2077/Riders_on_the_Storm', tags: ['panam', 'iconic'], reward: 'Overwatch (Sniper)' },
+        { id: 'b5', cat: 'Badlands', name: 'With a Little Help From My Friends', link: 'https://www.ign.com/wikis/cyberpunk-2077/With_a_Little_Help_From_My_Friends', tags: ['panam'] },
+        { id: 'b6', cat: 'Badlands', name: 'Queen of the Highway', link: 'https://www.ign.com/wikis/cyberpunk-2077/Queen_of_the_Highway', tags: ['panam', 'romance'] },
+        { id: 'b7', cat: 'Badlands', name: 'Fortunate Son', link: 'https://www.ign.com/wikis/cyberpunk-2077/Fortunate_Son', tags: [] },
+		
+		
+        // --- DATA PACKS GO HERE ---
+    ];
+
+    const container = document.getElementById('list-container');
+    let currentTag = null;
+
+    function render() {
+        container.innerHTML = '';
+        const categories = [...new Set(jobs.map(j => j.cat))];
+        
+        categories.forEach(cat => {
+            const section = document.createElement('div');
+            section.className = 'section';
+            section.innerHTML = `<div class="section-head" onclick="toggleCat('${cat}')"><b>${cat.toUpperCase()}</b><span id="arr-${cat}">▼</span></div>
+                                 <div class="section-content" id="cnt-${cat}"></div>`;
+            container.appendChild(section);
+            
+            jobs.filter(j => j.cat === cat).forEach(job => {
+                const isDone = localStorage.getItem(job.id) === 'true';
+                const card = document.createElement('div');
+                card.className = `job-card ${isDone ? 'done' : ''}`;
+                card.id = `card-${job.id}`;
+                
+                let badges = '';
+                if(job.tags.includes('iconic')) badges += `<span class="badge iconic">🔫 ${job.reward || 'Iconic'}</span>`;
+                if(job.tags.includes('missable')) badges += `<span class="badge missable">⚠️ Missable</span>`;
+                if(job.tags.includes('romance')) badges += `<span class="badge romance">❤️ Romance</span>`;
+
+                card.innerHTML = `
+                    <div style="display:flex; align-items:flex-start">
+                        <input type="checkbox" id="${job.id}" ${isDone ? 'checked' : ''} onchange="sync('${job.id}')">
+                        <div style="margin-left:10px; flex-grow:1">
+                            <a href="${job.link}" target="_blank">${job.name}</a>
+                            <div style="margin-top:4px">${badges}</div>
+                        </div>
+                        <button class="btn" style="padding:2px 5px" onclick="toggleNote('${job.id}')">📝</button>
+                    </div>
+                    <textarea id="n-${job.id}" class="note-area" onkeyup="saveNote('${job.id}')" placeholder="Enter choice notes...">${localStorage.getItem('note-'+job.id)||''}</textarea>
+                `;
+                document.getElementById(`cnt-${cat}`).appendChild(card);
+                if(localStorage.getItem('note-'+job.id)) document.getElementById('n-'+job.id).style.display = 'block';
+            });
+        });
+        updateProgress();
+    }
+
+    function sync(id) {
+        localStorage.setItem(id, document.getElementById(id).checked);
+        document.getElementById(`card-${id}`).classList.toggle('done', document.getElementById(id).checked);
+        updateProgress();
+    }
+    function saveNote(id) { localStorage.setItem('note-'+id, document.getElementById('n-'+id).value); }
+    function toggleNote(id) { const el = document.getElementById('n-'+id); el.style.display = el.style.display === 'block' ? 'none' : 'block'; }
+    function toggleCat(cat) { const el = document.getElementById('cnt-'+cat); el.classList.toggle('collapsed'); document.getElementById('arr-'+cat).innerText = el.classList.contains('collapsed') ? '▶' : '▼'; }
+
+    function updateProgress() {
+        const done = jobs.filter(j => localStorage.getItem(j.id) === 'true').length;
+        const pct = Math.round((done / jobs.length) * 100) || 0;
+        document.getElementById('prog-bar').style.width = pct + '%';
+        document.getElementById('pct-text').innerText = `${done} / ${jobs.length} QUESTS LOADED (${pct}%)`;
+    }
+
+    function filter() {
+        const q = document.getElementById('search').value.toLowerCase();
+        const hideDone = localStorage.getItem('hideDone') === 'true';
+        jobs.forEach(j => {
+            const matches = (j.name.toLowerCase().includes(q) || (j.reward && j.reward.toLowerCase().includes(q))) &&
+                            (!currentTag || j.tags.includes(currentTag)) &&
+                            (!hideDone || localStorage.getItem(j.id) !== 'true');
+            document.getElementById(`card-${j.id}`).classList.toggle('hidden', !matches);
+        });
+    }
+
+    function filterByTag(tag) {
+        currentTag = currentTag === tag ? null : tag;
+        document.querySelectorAll('.filter-row .btn').forEach(b => b.classList.toggle('active', b.innerText.toLowerCase().includes(tag) && currentTag));
+        filter();
+    }
+
+    function toggleHideDone() {
+        localStorage.setItem('hideDone', localStorage.getItem('hideDone') !== 'true');
+        document.getElementById('hideDone').classList.toggle('active', localStorage.getItem('hideDone') === 'true');
+        filter();
+    }
+
+    function clearData() { if(confirm("CLEAR ALL PROGRESS?")) { localStorage.clear(); location.reload(); } }
+    render();
+</script>
+</body>
+</html>
